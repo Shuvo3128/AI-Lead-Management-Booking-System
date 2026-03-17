@@ -1,0 +1,401 @@
+{
+  "name": "02 - AI Lead Qualification",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        32,
+        16
+      ],
+      "id": "18d98a63-33fe-4d58-9c76-3a60d1801cb7",
+      "name": "Start Qualification"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM leads\nWHERE qualification_status = 'pending'\nORDER BY id ASC\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        16
+      ],
+      "id": "2d3e8cd4-3c28-490c-9e5c-461e7dfd805f",
+      "name": "Get Pending Lead",
+      "credentials": {
+        "postgres": {
+          "id": "9zykMavBoY3grlBX",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "81743d97-84c5-4e67-b6fc-edd8f8592017",
+              "name": "=ai_input",
+              "value": "={{ ` Lead ID: ${$json.id} Full Name: ${$json.full_name} Email: ${$json.email} Phone: ${$json.phone} Message: ${$json.message} Source: ${$json.source} Business Type: ${$json.business_type} ` }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        16
+      ],
+      "id": "78cf9ade-7e2b-4de2-adbf-8d3a1e992bd3",
+      "name": "Prepare AI Input"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4",
+          "mode": "list",
+          "cachedResultName": "GPT-4"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are an AI sales qualification assistant.\n\nAnalyze the lead and return only valid JSON.\n\nRules:\n- lead_score must be a number from 0 to 100\n- lead_temperature must be one of: hot, warm, cold\n- intent_summary must be short and clear\n- recommended_action must be short and practical\n\nUse the lead's message, source, and business_type to determine intent and urgency.\n\nReturn JSON in this exact format:\n{\n  \"lead_score\": 0,\n  \"lead_temperature\": \"cold\",\n  \"intent_summary\": \"\",\n  \"recommended_action\": \"\"\n}\n\nLead Data:\n{{$json.ai_input}}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        656,
+        16
+      ],
+      "id": "88c8e9b6-61a2-427f-95ec-0c287f35d9da",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "FPi2oSiI2H03GMyI",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.output[0].content[0].text;\n\nlet parsed;\n\ntry {\n  parsed = JSON.parse(raw);\n} catch (error) {\n  throw new Error(\"AI response is not valid JSON: \" + raw);\n}\n\nreturn [\n  {\n    json: {\n      ...$json,\n      lead_score: parsed.lead_score,\n      lead_temperature: parsed.lead_temperature,\n      intent_summary: parsed.intent_summary,\n      recommended_action: parsed.recommended_action\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        16
+      ],
+      "id": "f47a5d10-92b2-417d-9f6b-111c8bced29a",
+      "name": "Parse AI Qualification"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "leads",
+          "mode": "list",
+          "cachedResultName": "leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_valid": true,
+            "lead_score": "={{ $json.lead_score }}",
+            "lead_temperature": "={{ $json.lead_temperature }}",
+            "intent_summary": "={{ $json.intent_summary }}",
+            "recommended_action": "={{ $json.recommended_action }}",
+            "qualification_status": "completed",
+            "updated_at": "={{$now}}",
+            "qualified_at": "={{$now}}",
+            "id": 0
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "business_type",
+              "displayName": "business_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_status",
+              "displayName": "lead_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qualification_status",
+              "displayName": "qualification_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "assigned_agent",
+              "displayName": "assigned_agent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "validation_reason",
+              "displayName": "validation_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_valid",
+              "displayName": "is_valid",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_score",
+              "displayName": "lead_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_temperature",
+              "displayName": "lead_temperature",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "intent_summary",
+              "displayName": "intent_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recommended_action",
+              "displayName": "recommended_action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qualified_at",
+              "displayName": "qualified_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1184,
+        16
+      ],
+      "id": "6fc17f79-2fa6-4e82-8611-44e92c764a0b",
+      "name": "Update Lead Qualification",
+      "credentials": {
+        "postgres": {
+          "id": "9zykMavBoY3grlBX",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start Qualification": {
+      "main": [
+        [
+          {
+            "node": "Get Pending Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Pending Lead": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Input": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Qualification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Qualification": {
+      "main": [
+        [
+          {
+            "node": "Update Lead Qualification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "e768ccba-8a99-4e28-bea2-345d26326b5a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "de3434bb07fcf875f87bc3913830fc9b9e1289216c0b878ad80fef5c3b978291"
+  },
+  "id": "A4xYI0YRuJxsYaxI",
+  "tags": []
+}

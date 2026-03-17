@@ -1,0 +1,466 @@
+{
+  "name": "01-Lead Intake",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "=lead-intake",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -432,
+        -160
+      ],
+      "id": "95926c3c-77cc-4068-a9ee-d28a4629e4f9",
+      "name": "Lead Intake Webhook",
+      "webhookId": "e799a85a-00bd-4cd2-996b-b13243810b1c"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "41b5a480-bc7e-4ca5-bb31-9acaa8ed8625",
+              "name": "full_name",
+              "value": "={{ $json.body.full_name }}",
+              "type": "string"
+            },
+            {
+              "id": "c3c6b1ac-ce5e-41c4-b6f1-eefecfb57118",
+              "name": "email",
+              "value": "={{ $json.body.email }}",
+              "type": "string"
+            },
+            {
+              "id": "613dd23a-471a-417e-9f40-27d30eda1f8d",
+              "name": "phone",
+              "value": "={{ $json.body.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "2faf84f8-6a34-4927-9c0f-abdbb027955f",
+              "name": "message",
+              "value": "={{ $json.body.message }}",
+              "type": "string"
+            },
+            {
+              "id": "f2901fb8-460d-404e-81d3-8973632e2b46",
+              "name": "source",
+              "value": "={{$json.body.source}}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -208,
+        -160
+      ],
+      "id": "eed0a291-bf15-46f7-a4a4-895d7aa6fea3",
+      "name": "Normalize Lead Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "const full_name = $json.full_name || '';\nconst email = $json.email || '';\nconst phone = $json.phone || '';\n\nconst isValid = full_name.trim() !== '' && (email.trim() !== '' || phone.trim() !== '');\n\nreturn [\n  {\n    json: {\n      ...$json,\n      is_valid: isValid,\n      validation_reason: isValid ? \"valid lead\" : \"Missing name or both email and phone\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        -160
+      ],
+      "id": "14b79f68-6c0d-4d7e-b7b9-1880a78f8f3d",
+      "name": "const full_name = $json.full_name || ''; const email = $json.email || ''; const phone = $json.phone || '';  const isValid = full_name.trim() !== '' && (email.trim() !== '' || phone.trim() !== '');  return [   {     json: {       ...$json,       is_valid: isValid,       validation_reason: isValid ? \"valid lead\" : \"Missing name or both email and phone\"     }   } ];"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "85d63ee3-ab83-435b-b1ad-f7d354a6edf7",
+              "leftValue": "is_valid",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        112,
+        -160
+      ],
+      "id": "4cd1a451-8c7d-4b7a-95c2-3861086635a5",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "let source = ($json.source || 'unknown').toLowerCase().trim();\n\nif (source.includes('facebook')) {\n  source = 'facebook_ads';\n} \nelse if (source.includes('google')) {\n  source = 'google_ads';\n}\nelse if (source.includes('website') || source.includes('web')) {\n  source = 'website_form';\n}\nelse if (source.includes('landing')) {\n  source = 'landing_page';\n}\nelse if (source.includes('manual')) {\n  source = 'manual_entry';\n}\nelse if (source.includes('crm')) {\n  source = 'crm';\n}\nelse if (source.includes('email')) {\n  source = 'email_inquiry';\n}\nelse {\n  source = 'unknown';\n}\n\nreturn [\n  {\n    json: {\n      ...$json,\n      source\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        -144
+      ],
+      "id": "f58e46b3-2f71-4bfc-8068-b081f4e5b94c",
+      "name": "Normalize Source"
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = ($json.message || '').toLowerCase();\n\nlet business_type = 'unknown';\n\nconst realEstateKeywords = [\n  'buy house',\n  'buy home',\n  'sell house',\n  'real estate',\n  'property',\n  'mortgage',\n  'realtor',\n  'house',\n  'home'\n];\n\nconst financeKeywords = [\n  'insurance',\n  'life insurance',\n  'financial planning',\n  'retirement',\n  'investment',\n  'annuity',\n  'wealth',\n  'policy',\n  'coverage'\n];\n\nif (realEstateKeywords.some(keyword => text.includes(keyword))) {\n  business_type = 'real_estate';\n}\nelse if (financeKeywords.some(keyword => text.includes(keyword))) {\n  business_type = 'financial_planning_insurance';\n}\n\nreturn [\n  {\n    json: {\n      ...$json,\n      business_type\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        -144
+      ],
+      "id": "5a0e6433-eca3-4755-b64a-740613c3b2ad",
+      "name": "Detect Business Type"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5c4a8a0c-cf38-4701-9c72-2b284f327282",
+              "name": "lead_status",
+              "value": "new",
+              "type": "string"
+            },
+            {
+              "id": "799a0113-0c63-4a73-8e55-dbe78de6d758",
+              "name": "qualification_status",
+              "value": "pending",
+              "type": "string"
+            },
+            {
+              "id": "96b278f2-013d-4b71-bf91-7916ccfc4cbf",
+              "name": "assigned_agent",
+              "value": "ai_sales_manager",
+              "type": "string"
+            },
+            {
+              "id": "a0f5ac91-ad97-4c28-896e-011417446803",
+              "name": "created_at",
+              "value": "={{$now}}",
+              "type": "string"
+            },
+            {
+              "id": "a91b03d8-3aa7-4acc-8b98-d55af7bf2658",
+              "name": "updated_at",
+              "value": "={{$now}}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        -144
+      ],
+      "id": "c3e50191-5d1a-43c1-97cc-c4dd28064ae0",
+      "name": "Prepare Lead Record"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "leads",
+          "mode": "list",
+          "cachedResultName": "leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_valid": true,
+            "full_name": "={{ $json.full_name }}",
+            "email": "={{ $json.email }}",
+            "phone": "={{ $json.phone }}",
+            "message": "={{ $json.message }}",
+            "source": "={{ $json.source }}",
+            "business_type": "={{ $json.business_type }}",
+            "lead_status": "={{ $json.lead_status }}",
+            "qualification_status": "={{ $json.qualification_status }}",
+            "assigned_agent": "={{ $json.assigned_agent }}",
+            "validation_reason": "={{ $json.validation_reason }}",
+            "created_at": "={{ $json.created_at }}",
+            "updated_at": "={{ $json.updated_at }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "business_type",
+              "displayName": "business_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_status",
+              "displayName": "lead_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qualification_status",
+              "displayName": "qualification_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "assigned_agent",
+              "displayName": "assigned_agent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "validation_reason",
+              "displayName": "validation_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_valid",
+              "displayName": "is_valid",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        928,
+        -144
+      ],
+      "id": "35f6a039-2e3d-4128-8df9-4692dd7d1a96",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "9zykMavBoY3grlBX",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Lead Intake Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Lead Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Lead Fields": {
+      "main": [
+        [
+          {
+            "node": "const full_name = $json.full_name || ''; const email = $json.email || ''; const phone = $json.phone || '';  const isValid = full_name.trim() !== '' && (email.trim() !== '' || phone.trim() !== '');  return [   {     json: {       ...$json,       is_valid: isValid,       validation_reason: isValid ? \"valid lead\" : \"Missing name or both email and phone\"     }   } ];",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "const full_name = $json.full_name || ''; const email = $json.email || ''; const phone = $json.phone || '';  const isValid = full_name.trim() !== '' && (email.trim() !== '' || phone.trim() !== '');  return [   {     json: {       ...$json,       is_valid: isValid,       validation_reason: isValid ? \"valid lead\" : \"Missing name or both email and phone\"     }   } ];": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Normalize Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Source": {
+      "main": [
+        [
+          {
+            "node": "Detect Business Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Business Type": {
+      "main": [
+        [
+          {
+            "node": "Prepare Lead Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Lead Record": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "1b4b79b5-3607-4f9b-93f8-a9420dfdf437",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "de3434bb07fcf875f87bc3913830fc9b9e1289216c0b878ad80fef5c3b978291"
+  },
+  "id": "zwvESwPLxUtuGkYh",
+  "tags": []
+}
