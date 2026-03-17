@@ -1,0 +1,547 @@
+{
+  "name": "05 - Follow-up Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -368,
+        -208
+      ],
+      "id": "ac9d5206-3388-4a10-86c1-a272ecd1d2ef",
+      "name": "Check Follow-up Leads"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM leads\nWHERE response_status = 'sent'\n  AND lead_reply_received = FALSE\n  AND (last_contacted_at IS NULL OR last_contacted_at < NOW() - INTERVAL '1 day')\n  AND follow_up_count < 3\nORDER BY id ASC\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -160,
+        -208
+      ],
+      "id": "2b8fde6c-2e5e-4770-870e-94e10bdfd9a6",
+      "name": "Get Leads For Follow-up",
+      "credentials": {
+        "postgres": {
+          "id": "TeWngFjA9U6gbO1Z",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f608265c-3088-40f3-af7d-88d277a3f425",
+              "name": "={{$json.id}}",
+              "value": "={{ ` Lead ID: ${$json.id} Full Name: ${$json.full_name} Email: ${$json.email} Original Message: ${$json.message} Business Type: ${$json.business_type} Intent Summary: ${$json.intent_summary} Recommended Action: ${$json.recommended_action} Previous Response: ${$json.ai_response_draft} Follow-up Count: ${$json.follow_up_count} ` }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        48,
+        -208
+      ],
+      "id": "ec3e891f-320d-48aa-9289-cec72d7897f0",
+      "name": "Prepare Follow-up Input"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4",
+          "mode": "list",
+          "cachedResultName": "GPT-4"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are an AI sales follow-up assistant.\n\nWrite a short, polite, professional follow-up email for this lead.\n\nRules:\n- Keep it concise\n- Sound natural and human\n- Mention the lead's interest\n- Ask if they are still interested\n- Include a simple call to action\n- Return ONLY valid JSON\n- Do not include bullet points\n- Do not include labels like Name, Interest, Subject, or Explanation\n- Do not include markdown\n\nReturn JSON in this exact format:\n{\n  \"follow_up_message\": \"\"\n}\n\nLead Data:\n{{$json.followup_input}}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        256,
+        -208
+      ],
+      "id": "8a87646b-573d-4fcc-a625-33aecba253e0",
+      "name": "Generate Follow-up Email",
+      "credentials": {
+        "openAiApi": {
+          "id": "fi3wwr185fV8OP8H",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.output[0].content[0].text;\n\nlet parsed;\nlet cleaned = raw.trim();\n\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (error) {\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (!match) {\n    throw new Error(\"AI follow-up output is not valid JSON: \" + raw);\n  }\n  parsed = JSON.parse(match[0]);\n}\n\nreturn [\n  {\n    json: {\n      lead_id: $('Get Leads For Follow-up').first().json.id,\n      email: $('Get Leads For Follow-up').first().json.email,\n      full_name: $('Get Leads For Follow-up').first().json.full_name,\n      follow_up_count: $('Get Leads For Follow-up').first().json.follow_up_count,\n      follow_up_message: parsed.follow_up_message\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        -208
+      ],
+      "id": "d5fbe395-ca56-496f-8f98-3271b6a3cfef",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7ca5ec03-c972-4bc3-8d3d-b6f0cffd7c0f",
+              "name": "to_email",
+              "value": "={{$json.email}}",
+              "type": "string"
+            },
+            {
+              "id": "d94e3349-685e-47b3-9eca-b3f3dddd5f56",
+              "name": "Just following up on your inquiry",
+              "value": "={{$json.follow_up_message}}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        800,
+        -208
+      ],
+      "id": "2d3b78be-9e30-4713-81c6-cb159d0b2fe3",
+      "name": "Prepare Follow-up Email Data"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$json.to_email}}",
+        "subject": "Just following up on your inquiry",
+        "emailType": "text",
+        "message": "={{ $json.follow_up_message }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1008,
+        -208
+      ],
+      "id": "42ecc1d4-e6b3-4daa-9f6d-79b8643464b6",
+      "name": "Send a message",
+      "webhookId": "f575a5c9-6945-46cb-9bea-7fc5e0a367da",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "vkWLBXSK93UHVt0D",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "leads",
+          "mode": "list",
+          "cachedResultName": "leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_valid": false,
+            "lead_reply_received": false,
+            "lead_score": 0,
+            "follow_up_count": "={{ Number($node[\"Prepare Follow-up Email Data\"].json[\"follow_up_count\"] || 0) + 1 }}",
+            "last_contacted_at": "={{$now}}",
+            "updated_at": "={{$now}}",
+            "id": 0
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "business_type",
+              "displayName": "business_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_status",
+              "displayName": "lead_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qualification_status",
+              "displayName": "qualification_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "assigned_agent",
+              "displayName": "assigned_agent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "validation_reason",
+              "displayName": "validation_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_valid",
+              "displayName": "is_valid",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_score",
+              "displayName": "lead_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_temperature",
+              "displayName": "lead_temperature",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "intent_summary",
+              "displayName": "intent_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recommended_action",
+              "displayName": "recommended_action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "qualified_at",
+              "displayName": "qualified_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_response_draft",
+              "displayName": "ai_response_draft",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "response_status",
+              "displayName": "response_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "response_generated_at",
+              "displayName": "response_generated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "response_sent_at",
+              "displayName": "response_sent_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "follow_up_count",
+              "displayName": "follow_up_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_contacted_at",
+              "displayName": "last_contacted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lead_reply_received",
+              "displayName": "lead_reply_received",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1216,
+        -208
+      ],
+      "id": "04afee63-d3d6-4aac-9d8f-f60e1a70aa34",
+      "name": "Update Follow-up Status",
+      "credentials": {
+        "postgres": {
+          "id": "TeWngFjA9U6gbO1Z",
+          "name": "Postgres account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Check Follow-up Leads": {
+      "main": [
+        [
+          {
+            "node": "Get Leads For Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Leads For Follow-up": {
+      "main": [
+        [
+          {
+            "node": "Prepare Follow-up Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Follow-up Input": {
+      "main": [
+        [
+          {
+            "node": "Generate Follow-up Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Follow-up Email": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Prepare Follow-up Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Follow-up Email Data": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Update Follow-up Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "6d0e069a-b561-4dab-b52a-4454ae87669d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "de3434bb07fcf875f87bc3913830fc9b9e1289216c0b878ad80fef5c3b978291"
+  },
+  "id": "sZEYF7XU8YsAF8aP",
+  "tags": []
+}
